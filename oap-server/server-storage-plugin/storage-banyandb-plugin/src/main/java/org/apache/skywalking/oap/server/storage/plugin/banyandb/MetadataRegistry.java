@@ -96,11 +96,19 @@ public enum MetadataRegistry {
         if (shardingColumns.isEmpty()) {
             throw new IllegalStateException("sharding keys of model[stream." + model.getName() + "] must not be empty");
         }
+
+        String timestampColumn4Stream = model.getBanyanDBModelExtension().getTimestampColumn();
+        if (StringUtil.isBlank(timestampColumn4Stream)) {
+            throw new IllegalStateException(
+                "Model[stream." + model.getName() + "] miss defined @BanyanDB.TimestampColumn");
+        }
+        schemaBuilder.timestampColumn4Stream(timestampColumn4Stream);
+
         // parse tag metadata
         // this can be used to build both
         // 1) a list of TagFamilySpec,
         // 2) a list of IndexRule,
-        List<TagMetadata> tags = parseTagMetadata(model, schemaBuilder, shardingColumns);
+        List<TagMetadata> tags = parseTagMetadata(model, schemaBuilder, shardingColumns, timestampColumn4Stream);
         List<TagFamilySpec> tagFamilySpecs = schemaMetadata.extractTagFamilySpec(tags, false);
         // iterate over tagFamilySpecs to save tag names
         for (final TagFamilySpec tagFamilySpec : tagFamilySpecs) {
@@ -108,12 +116,7 @@ public enum MetadataRegistry {
                 schemaBuilder.tag(tagSpec.getTagName());
             }
         }
-        String timestampColumn4Stream = model.getBanyanDBModelExtension().getTimestampColumn();
-        if (StringUtil.isBlank(timestampColumn4Stream)) {
-            throw new IllegalStateException(
-                    "Model[stream." + model.getName() + "] miss defined @BanyanDB.TimestampColumn");
-        }
-        schemaBuilder.timestampColumn4Stream(timestampColumn4Stream);
+
         List<IndexRule> indexRules = tags.stream()
                 .map(TagMetadata::getIndexRule)
                 .filter(Objects::nonNull)
@@ -314,11 +317,14 @@ public enum MetadataRegistry {
      *
      * @since 9.4.0 Skip {@link Record#TIME_BUCKET}
      */
-    List<TagMetadata> parseTagMetadata(Model model, Schema.SchemaBuilder builder, List<String> shardingColumns) {
+    List<TagMetadata> parseTagMetadata(Model model,
+                                       Schema.SchemaBuilder builder,
+                                       List<String> shardingColumns,
+                                       String timestampColumn4Stream) {
         List<TagMetadata> tagMetadataList = new ArrayList<>();
         for (final ModelColumn col : model.getColumns()) {
             final String columnStorageName = col.getColumnName().getStorageName();
-            if (columnStorageName.equals(Record.TIME_BUCKET)) {
+            if (columnStorageName.equals(Record.TIME_BUCKET) || columnStorageName.equals(timestampColumn4Stream)) {
                 continue;
             }
             final TagFamilySpec.TagSpec tagSpec = parseTagSpec(col);
